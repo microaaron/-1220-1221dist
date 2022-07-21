@@ -1,8 +1,8 @@
 /** 
  * X3DOM 1.8.3-dev
- * Build : 7408
- * Revision: 81f9e42e80fa77078711d2131f387f81316297a1
- * Date: Tue Jul 19 08:31:13 2022 +0800
+ * Build : 7409
+ * Revision: cd32048c1e00317891a3af016d11e98fe5ce7a3f
+ * Date: Wed Jul 20 04:56:03 2022 +0800
  */
 /**
  * X3DOM JavaScript Library
@@ -29,9 +29,9 @@ var x3dom = {
 
 x3dom.about = {
     version  : "1.8.3-dev",
-    build    : "7408",
-    revision : "81f9e42e80fa77078711d2131f387f81316297a1",
-    date     : "Tue Jul 19 08:31:13 2022 +0800"
+    build    : "7409",
+    revision : "cd32048c1e00317891a3af016d11e98fe5ce7a3f",
+    date     : "Wed Jul 20 04:56:03 2022 +0800"
 };
 
 /**
@@ -11896,11 +11896,6 @@ x3dom.NodeNameSpace.prototype.setupTree = function ( domNode, parent )
             if ( n )
             {
                 domNode._x3domNode = n;
-                // attach X3DOM's custom field interface functions
-                domNode.requestFieldRef = x3dom.requestFieldRef;
-                domNode.releaseFieldRef = x3dom.releaseFieldRef;
-                domNode.getFieldValue = x3dom.getFieldValue;
-                domNode.setFieldValue = x3dom.setFieldValue;
             }
             return n;
         }
@@ -38915,10 +38910,10 @@ x3dom.registerNodeType(
             parentRemoved : function ( parent )
             {
                 // attention: overwritten by concrete classes
-                if ( this._parentNodes.length == 0 )
+                if ( this._parentNodes.length === 0 )
                 {
                     x3dom.debug.logInfo( this.typeName() + ": " + this._DEF + " is no longer used." );
-                    for ( var i = this._childNodes.length - 1;i >= 0;i-- )
+                    for ( var i = this._childNodes.length - 1;i >= 0;--i )
                     {
                         this.removeChild( this._childNodes[ i ] ); //remove this node from child's _parentNodes then trigger child.parentRemoved()
                     }
@@ -45688,6 +45683,7 @@ x3dom.registerNodeType(
             parentRemoved : function ( parent )
             {
                 //TODO
+                x3dom.nodeTypes.X3DChildNode.parentRemoved.prototype.call( this, parent );
             }
         }
     )
@@ -47759,7 +47755,7 @@ x3dom.registerNodeType(
                 }
             },
 
-            parentRemoved : function ( parent )
+            /*parentRemoved : function ( parent )
             {
                 if ( this._parentNodes.length === 1 && this._parentNodes[ 0 ] == parent )
                 {
@@ -47776,7 +47772,8 @@ x3dom.registerNodeType(
                         }
                     }
                 }
-            },
+                x3dom.nodeTypes.X3DChildNode.prototype.parentRemoved.call( this, parent );
+            },*/
             onRemove : function ()
             {
                 //console.log("remove");
@@ -48299,6 +48296,7 @@ x3dom.registerNodeType(
                         }
                     }
                 }
+                x3dom.nodeTypes.X3DChildNode.prototype.parentRemoved.call( this, parent );
             },
 
             tick : function ( t )
@@ -52551,6 +52549,7 @@ x3dom.registerNodeType(
                         }
                     }
                 }
+                x3dom.nodeTypes.X3DSensorNode.prototype.parentRemoved( parent );
             },
 
             _getCycleAt : function ( time )
@@ -52937,7 +52936,7 @@ x3dom.registerNodeType(
                 if ( fieldName == "url" || fieldName == "load" )
                 {
                     //Remove the childs of the x3domNode
-                    for ( var i = 0; i < this._childNodes.length; i++ )
+                    for ( var i = this._childNodes.length - 1;i >= 0;--i )
                     {
                         this.removeChild( this._childNodes[ i ] );
                     }
@@ -52974,23 +52973,28 @@ x3dom.registerNodeType(
                 }
             },
 
-            parentRemoved : function ()
+            parentRemoved : function ( parent )
             {
-                var global = x3dom.getGlobal();
+                //var global = x3dom.getGlobal();
 
-                if ( this._childNodes.length > 0 && this._childNodes[ 0 ] && this._childNodes[ 0 ]._nameSpace )
-                {this._nameSpace.removeSpace( this._childNodes[ 0 ]._nameSpace );}
+                /*if ( this._childNodes.length > 0 && this._childNodes[ 0 ] && this._childNodes[ 0 ]._nameSpace )
+                {this._nameSpace.removeSpace( this._childNodes[ 0 ]._nameSpace );}*/
+                for ( var child of this._childNodes )
+                {
+                    this._nameSpace.removeSpace( child._nameSpace );
+                }
 
-                for ( var i = 0, n = this._childNodes.length; i < n; i++ )
+                x3dom.nodeTypes.X3DGroupingNode.prototype.parentRemoved.call( this, parent );
+                /*for ( var i = 0, n = this._childNodes.length; i < n; i++ )
                 {
                     if ( this._childNodes[ i ] )
                     {
                         this._childNodes[ i ].parentRemoved( this );
                         global[ "_remover" ] = this.removeChild( this._childNodes[ i ] );
                     }
-                }
+                }*/
 
-                delete global[ "_remover" ];
+                //delete global[ "_remover" ];
             },
 
             fireEvents : function ( eventType )
@@ -58894,6 +58898,7 @@ x3dom.registerNodeType(
                         } );
                     }
                 } );
+                x3dom.nodeTypes.X3DAppearanceChildNode.prototype.parentRemoved.call( this, parent );
             },
 
             fieldChanged : function ( fieldName )
@@ -59564,6 +59569,7 @@ x3dom.registerNodeType(
                 {
                     this._cf.scene.node.parentRemoved( this );
                 }
+                x3dom.nodeTypes.X3DTextureNode.prototype.parentRemoved.call( this, parent );
             },
 
             requirePingPong : function ()
