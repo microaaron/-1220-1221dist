@@ -52549,7 +52549,7 @@ x3dom.registerNodeType(
                         }
                     }
                 }
-                x3dom.nodeTypes.X3DSensorNode.prototype.parentRemoved( parent );
+                x3dom.nodeTypes.X3DSensorNode.prototype.parentRemoved.call( this, parent );
             },
 
             _getCycleAt : function ( time )
