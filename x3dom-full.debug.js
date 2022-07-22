@@ -1,8 +1,8 @@
 /** 
  * X3DOM 1.8.3-dev
- * Build : 7420
- * Revision: 067c41057c58e5c051a2f8ded389d9edd737b771
- * Date: Thu Jul 21 14:00:36 2022 +0800
+ * Build : 7421
+ * Revision: f8f45d9f4a4afabf57d5784a1996ee377cd55bc5
+ * Date: Fri Jul 22 15:32:18 2022 +0800
  */
 /**
  * X3DOM JavaScript Library
@@ -29,9 +29,9 @@ var x3dom = {
 
 x3dom.about = {
     version  : "1.8.3-dev",
-    build    : "7420",
-    revision : "067c41057c58e5c051a2f8ded389d9edd737b771",
-    date     : "Thu Jul 21 14:00:36 2022 +0800"
+    build    : "7421",
+    revision : "f8f45d9f4a4afabf57d5784a1996ee377cd55bc5",
+    date     : "Fri Jul 22 15:32:18 2022 +0800"
 };
 
 /**
@@ -45692,7 +45692,7 @@ x3dom.registerNodeType(
             parentRemoved : function ( parent )
             {
                 //TODO
-                x3dom.nodeTypes.X3DChildNode.parentRemoved.prototype.call( this, parent );
+                x3dom.nodeTypes.X3DChildNode.prototype.parentRemoved.call( this, parent );
             }
         }
     )
