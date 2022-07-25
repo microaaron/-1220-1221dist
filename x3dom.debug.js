@@ -1,8 +1,8 @@
 /** 
  * X3DOM 1.8.3-dev
- * Build : 7421
- * Revision: f8f45d9f4a4afabf57d5784a1996ee377cd55bc5
- * Date: Fri Jul 22 15:32:18 2022 +0800
+ * Build : 7431
+ * Revision: 1495d05f82f25725b3001d5aa1bf1dd8b2ef7d2d
+ * Date: Mon Jul 25 13:50:35 2022 +0800
  */
 /**
  * X3DOM JavaScript Library
@@ -29,9 +29,9 @@ var x3dom = {
 
 x3dom.about = {
     version  : "1.8.3-dev",
-    build    : "7421",
-    revision : "f8f45d9f4a4afabf57d5784a1996ee377cd55bc5",
-    date     : "Fri Jul 22 15:32:18 2022 +0800"
+    build    : "7431",
+    revision : "1495d05f82f25725b3001d5aa1bf1dd8b2ef7d2d",
+    date     : "Mon Jul 25 13:50:35 2022 +0800"
 };
 
 /**
@@ -21176,9 +21176,15 @@ x3dom.Texture.prototype.updateTexture = function ()
                 tex._video = document.createElement( "video" );
                 tex._video.setAttribute( "preload", "auto" );
                 tex._video.setAttribute( "muted", "muted" );
-                p.appendChild( tex._video );
-                tex._video.style.visibility = "hidden";
-                tex._video.style.display = "none";
+                tex._video.setAttribute( "autoplay", "" );
+                tex._video.setAttribute( "playsinline", "" );
+                tex._video.crossOrigin = "anonymous";
+                tex._video.retryInterval = 1000;
+                tex._video.retryGrowth = 0.2;
+                // p.appendChild( tex._video );
+                // tex._video.style.visibility = "hidden";
+                // tex._video.style.display = "none";
+                tex._video.load();
             }
 
             for ( var i = 0; i < tex._vf.url.length; i++ )
@@ -21206,7 +21212,17 @@ x3dom.Texture.prototype.updateTexture = function ()
 
         var startVideo = function ()
         {
-            tex._video.play();
+            tex._video.play()
+                .then( function fulfilled ()
+                {
+                    tex._intervalID = setInterval( updateMovie, 16 );
+                } )
+                .catch( function rejected ( err )
+                {
+                    x3dom.debug.logInfo( "retrying: " + err );
+                    setTimeout( startVideo, tex._video.retryInterval );
+                    tex._video.retryInterval *= 1.0 + tex._video.retryGrowth;
+                } );
             tex._intervalID = setInterval( updateMovie, 16 );
         };
 
@@ -59188,8 +59204,9 @@ x3dom.registerNodeType(
                     {
                         this._video.removeChild( this._video.firstChild );
                     }
-                    document.body.removeChild( this._video );
+                    //document.body.removeChild( this._video );
                     this._video = null;
+                    clearInterval( this._intervalID );
                 }
             }
         }
