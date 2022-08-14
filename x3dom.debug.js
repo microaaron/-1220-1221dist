@@ -1,8 +1,8 @@
 /** 
  * X3DOM 1.8.3-dev
- * Build : 7431
- * Revision: 1495d05f82f25725b3001d5aa1bf1dd8b2ef7d2d
- * Date: Mon Jul 25 13:50:35 2022 +0800
+ * Build : 7422
+ * Revision: d16543356b77465406d16f5b5c49e9b179522459
+ * Date: Sun Aug 7 18:16:18 2022 -0400
  */
 /**
  * X3DOM JavaScript Library
@@ -29,9 +29,9 @@ var x3dom = {
 
 x3dom.about = {
     version  : "1.8.3-dev",
-    build    : "7431",
-    revision : "1495d05f82f25725b3001d5aa1bf1dd8b2ef7d2d",
-    date     : "Mon Jul 25 13:50:35 2022 +0800"
+    build    : "7422",
+    revision : "d16543356b77465406d16f5b5c49e9b179522459",
+    date     : "Sun Aug 7 18:16:18 2022 -0400"
 };
 
 /**
@@ -1961,7 +1961,7 @@ x3dom.X3DCanvas.prototype.tick = function ( timestamp )
 
         this.doc.render( this.gl, this.vrFrameData, this.vrDisplay );
 
-        if ( !this.doc._scene._vf.doPickPass )
+        if ( this.doc._scene && !this.doc._scene._vf.doPickPass )
         {
             runtime.removeMeasurement( "PICKING" );
         }
@@ -11450,6 +11450,24 @@ x3dom.BindableBag.prototype.setRefNode = function ( node )
 };
 
 /**
+ * BindableBag Clear Ref Node
+ *
+ * @param node
+ */
+x3dom.BindableBag.prototype.clearRefNode = function ()
+{
+    this._stacks.forEach( function ( stack )
+    {
+        // clear reference to Scene
+        if ( stack._defaultRoot )
+        {
+            delete stack._defaultRoot[ stack._getter ];
+        }
+        stack._defaultRoot = null;
+    } );
+};
+
+/**
  * BindableBag Add Bindable
  *
  * @param node
@@ -16508,7 +16526,7 @@ x3dom.gfx_webgl = ( function ()
                     if ( this._webgl.fbo.dtex )
                     {gl.deleteTexture( this._webgl.fbo.dtex );}
                     if ( this._webgl.fbo.rbo )
-                    {gl.deleteFramebuffer( this._webgl.fbo.rbo );}
+                    {gl.deleteRenderbuffer( this._webgl.fbo.rbo );}
                     gl.bindFramebuffer( gl.FRAMEBUFFER, null );
                     gl.deleteFramebuffer( this._webgl.fbo.fbo );
                     this._webgl.fbo.rbo = null;
@@ -21157,7 +21175,9 @@ x3dom.Texture.prototype.updateTexture = function ()
             element_vid.setAttribute( "class", "dash-video-player" + x3dom.Texture.textNum );
             tex._video = document.createElement( "video" );
             tex._video.setAttribute( "preload", "auto" );
-            tex._video.setAttribute( "muted", "muted" );
+            //tex._video.setAttribute( "muted", "muted" );
+            tex._video.setAttribute( "playsinline", "" );
+            tex._video.crossOrigin = "anonymous";
 
             var scriptToRun = document.createElement( "script" );
             scriptToRun.setAttribute( "type", "text/javascript" );
@@ -21175,12 +21195,10 @@ x3dom.Texture.prototype.updateTexture = function ()
             {
                 tex._video = document.createElement( "video" );
                 tex._video.setAttribute( "preload", "auto" );
-                tex._video.setAttribute( "muted", "muted" );
+                //tex._video.setAttribute( "muted", "muted" );
                 tex._video.setAttribute( "autoplay", "" );
                 tex._video.setAttribute( "playsinline", "" );
                 tex._video.crossOrigin = "anonymous";
-                tex._video.retryInterval = 1000;
-                tex._video.retryGrowth = 0.2;
                 // p.appendChild( tex._video );
                 // tex._video.style.visibility = "hidden";
                 // tex._video.style.display = "none";
@@ -21212,29 +21230,56 @@ x3dom.Texture.prototype.updateTexture = function ()
 
         var startVideo = function ()
         {
+            //x3dom.debug.logInfo( "startVideo" );
+            window.removeEventListener( "mousedown", startVideo );
+            window.removeEventListener( "keydown", startVideo );
+            if ( !( tex._video instanceof HTMLMediaElement ) )
+            {
+                x3dom.debug.logInfo( "No video exists." );
+                return;
+            }
             tex._video.play()
                 .then( function fulfilled ()
                 {
+                    if ( tex._intervalID )
+                    {
+                        x3dom.debug.logInfo( "The video has already started, startVideo() is called repeatedly." );
+                        clearInterval( tex._intervalID );
+                        tex._intervalID = null;
+                    }
                     tex._intervalID = setInterval( updateMovie, 16 );
                 } )
                 .catch( function rejected ( err )
                 {
-                    x3dom.debug.logInfo( "retrying: " + err );
-                    setTimeout( startVideo, tex._video.retryInterval );
-                    tex._video.retryInterval *= 1.0 + tex._video.retryGrowth;
+                    x3dom.debug.logInfo( "Waiting for interaction: " + err );
+                    window.addEventListener( "mousedown", startVideo );
+                    window.addEventListener( "keydown", startVideo );
                 } );
-            tex._intervalID = setInterval( updateMovie, 16 );
+        };
+
+        var pauseVideo = function ()
+        {
+            //x3dom.debug.logInfo( "pauseVideo" );
+            window.removeEventListener( "mousedown", startVideo );
+            window.removeEventListener( "keydown", startVideo );
+            tex._video.pause();
+            clearInterval( tex._intervalID );
+            tex._intervalID = null;
         };
 
         var videoDone = function ()
         {
             clearInterval( tex._intervalID );
+            tex._intervalID = null;
             if ( tex._vf.loop === true )
             {
                 tex._video.play();
                 tex._intervalID = setInterval( updateMovie, 16 );
             }
         };
+
+        tex._video.startVideo = startVideo;
+        tex._video.pauseVideo = pauseVideo;
 
         // Start listening for the canplaythrough event, so we do not
         // start playing the video until we can do so without stuttering
@@ -21666,7 +21711,7 @@ x3dom.X3DDocument.prototype.load = function ( uri, sceneElemPos )
         if ( queued_uris.length === 0 )
         {
             // All done
-            doc._setup( uri_docs[ uri ], uri_docs, sceneElemPos );
+            doc._setup( uri_docs[ uri ], uri_docs, sceneElemPos );  //What do the 2nd and 3rd parameters do?
             doc.onload();
             return;
         }
@@ -21685,7 +21730,7 @@ x3dom.X3DDocument.prototype.load = function ( uri, sceneElemPos )
     next_step();
 };
 
-x3dom.findScene = function ( x3dElem )
+x3dom.X3DDocument.prototype.findScene = function ( x3dElem )
 {
     var sceneElems = [];
 
@@ -21701,25 +21746,51 @@ x3dom.findScene = function ( x3dElem )
 
     if ( sceneElems.length > 1 )
     {
-        x3dom.debug.logError( "X3D element has more than one Scene child (has " +
-                             x3dElem.childNodes.length + ")." );
+        x3dom.debug.logInfo( "X3D element has more than one Scene child (has " + sceneElems.length + "). Load the 1st." );
+        return sceneElems[ 0 ];
     }
-    else
+    else if ( sceneElems.length === 1 )
     {
         return sceneElems[ 0 ];
     }
-    return null;
+    else
+    {
+        x3dom.debug.logInfo( "X3D element has no Scene child." );
+        var onMutation = function ( records, observer )
+        {
+            for ( var record of records )
+            {
+                if ( record.type === "childList" )
+                {
+                    for ( var addedNode of record.addedNodes )
+                    {
+                        if ( addedNode.tagName == "SCENE" )
+                        {
+                            x3dom.debug.logInfo( "Scene element(s) found in X3D element." );
+                            observer.disconnect();
+                            var scene = this._scene;
+                            scene.parentRemoved( null );
+                            scene.onRemove();
+                        }
+                    }
+                }
+            }
+        };
+        var mutationObserver = new MutationObserver( onMutation.bind( this ) );
+        mutationObserver.observe( x3dElem, { attributes: false, attributeOldValue: false, childList: true, subtree: false } );
+        return document.createElement( "Scene" );
+    }
+    //return null;
 };
 
-x3dom.X3DDocument.prototype._setup = function ( sceneDoc )
+x3dom.X3DDocument.prototype._setup = function ( x3dElem )
 {
     var doc = this;
 
-    // sceneDoc is the X3D element here...
-    var sceneElem = x3dom.findScene( sceneDoc );
+    var sceneElem = this.findScene( x3dElem );
 
     this.X3DMutationObserver.observe( document, { attributes: false, attributeOldValue: false, childList: true, subtree: true } );
-    this.mutationObserver.observe( sceneDoc, { attributes: false, attributeOldValue: false, childList: true, subtree: false } );
+    this.mutationObserver.observe( x3dElem, { attributes: false, attributeOldValue: false, childList: true, subtree: false } );
     this.mutationObserver.observe( sceneElem, { attributes: true, attributeOldValue: true, childList: true, subtree: true } );
 
     // create and add BindableBag that holds all bindable stacks
@@ -21908,6 +21979,10 @@ x3dom.X3DDocument.prototype.onDoubleClick = function ( ctx, x, y )
 x3dom.X3DDocument.prototype.onKeyDown = function ( keyCode )
 {
     //x3dom.debug.logInfo("pressed key " + keyCode);
+    if ( !this._viewarea )
+    {
+        return;
+    }
     switch ( keyCode )
     {
         case 37: /* left */
@@ -21930,6 +22005,10 @@ x3dom.X3DDocument.prototype.onKeyUp = function ( keyCode )
 {
     //x3dom.debug.logInfo("released key " + keyCode);
     var stack = null;
+    if ( !this._scene )
+    {
+        return;
+    }
 
     switch ( keyCode )
     {
@@ -21999,6 +22078,10 @@ x3dom.X3DDocument.prototype.onKeyUp = function ( keyCode )
 x3dom.X3DDocument.prototype.onKeyPress = function ( charCode )
 {
     //x3dom.debug.logInfo("pressed key " + charCode);
+    if ( !this._scene )
+    {
+        return;
+    }
     var nav = this._scene.getNavigationInfo();
     var env = this._scene.getEnvironment();
 
@@ -22208,7 +22291,8 @@ x3dom.X3DDocument.prototype.decrementDownloads = function ()
     this.downloadCount--;
 };
 
-x3dom.X3DDocument.prototype.cleanNodeBag = function ( bag, node )
+//This function is superseded by X3DNode.cleanNodeBag( bag ). Aug.2022
+/*x3dom.X3DDocument.prototype.cleanNodeBag = function ( bag, node )
 {
     for ( var i = 0, n = bag.length; i < n; i++ )
     {
@@ -22218,21 +22302,22 @@ x3dom.X3DDocument.prototype.cleanNodeBag = function ( bag, node )
             break;
         }
     }
-};
+};*/
 
 x3dom.X3DDocument.prototype.removeX3DOMBackendGraph = function ( domNode )
 {
     var children = domNode.childNodes;
 
-    for ( var i = 0, n = children.length; i < n; i++ )
+    for ( var child of domNode.children )
     {
-        this.removeX3DOMBackendGraph( children[ i ] );
+        this.removeX3DOMBackendGraph( child );
     }
 
-    if ( domNode._x3domNode )
+    //These codes are moved to the corresponding x3domNode's parentRemoved(). Aug.2022
+    /*if ( domNode._x3domNode )
     {
         var node = domNode._x3domNode;
-        //var nameSpace = node._nameSpace;
+        var nameSpace = node._nameSpace;
 
         if ( x3dom.isa( node, x3dom.nodeTypes.X3DShapeNode ) )
         {
@@ -22306,11 +22391,41 @@ x3dom.X3DDocument.prototype.removeX3DOMBackendGraph = function ( domNode )
         }
 
         //do not remove node from namespace if it was only "USE"d
-        //if ( nameSpace && !( domNode.getAttribute( "use" ) || domNode.getAttribute( "USE" ) ) )
-        if ( domNode.getAttribute( "use" ) || domNode.getAttribute( "USE" ) )
+        if ( nameSpace && !( domNode.getAttribute( "use" ) || domNode.getAttribute( "USE" ) ) )
         {
-            delete domNode._x3domNode;
+            nameSpace.removeNode( node._DEF );
+            //remove imported node from namespace
+            var superInlineNode = nameSpace.superInlineNode;
+            if ( superInlineNode && superInlineNode._nameSpace )
+            {
+                var imports = superInlineNode._nameSpace.imports;
+                var exports = nameSpace.exports;
+                var inlineDEFMap = imports.get( superInlineNode._DEF );
+                if ( inlineDEFMap )
+                {
+                    exports.forEach( function ( localDEF, exportedAS )
+                    {
+                        if ( node._DEF == localDEF )
+                        {
+                            inlineDEFMap.forEach( function ( importedDEF, importedAS )
+                            {
+                                if ( exportedAS == importedDEF )
+                                {
+                                    delete superInlineNode._nameSpace.defMap[ importedAS ];
+                                }
+                            } );
+                        }
+                    } );
+                }
+            }
         }
+        node._xmlNode = null;
+
+        delete domNode._x3domNode;
+    }*/
+    if ( domNode.getAttribute( "use" ) || domNode.getAttribute( "USE" ) )
+    {
+        delete domNode._x3domNode;
     }
 };
 
@@ -22453,9 +22568,16 @@ x3dom.X3DDocument.prototype.onNodeRemoved =  function ( removedNode, target )
             exportsMap.delete( AS );
         }
     }
+    else if ( parentNode && parentNode.tagName == "X3D" && "_x3domNode" in domNode && x3dom.isa( domNode._x3domNode, x3dom.nodeTypes.Scene ) )
+    {
+        //Root scene may have no parent, call parentRemoved() directly to clean up.
+        var node = domNode._x3domNode;
+        node.parentRemoved( null );
+        node.onRemove();
+    }
 };
 
-x3dom.X3DDocument.prototype.onX3DNodeRemoved =  function ( removedNode, target )
+x3dom.X3DDocument.prototype.onX3DNodeRemoved = function ( removedNode, target )
 {
     var domNodes = [];
     if ( "querySelector" in removedNode && removedNode.querySelector( "X3D" ) )
@@ -22616,6 +22738,31 @@ x3dom.X3DDocument.prototype.onX3DMutation = function ( records )
             //}
         }
     }
+};
+
+//Called by Scene.parentRemoved() when root scene is removed.
+x3dom.X3DDocument.prototype.onSceneRemoved = function ()
+{
+    //un-setup
+    if ( this._bindableBag )
+    {
+        this._bindableBag.clearRefNode();
+    }
+    this._scene = null;
+    if ( this._viewarea )
+    {
+        var i = this._nodeBag.viewarea.indexOf( this._viewarea );
+        if ( i >= 0 )
+        {
+            this._nodeBag.viewarea.splice( i, 1 );
+        }
+        this._viewarea._doc = null;
+        this._viewarea._scene = null;
+        this._viewarea = null;
+    }
+    //re-setup
+    this._setup( this._x3dElem );
+    this.needRender = true;
 };
 
 /**
@@ -38898,22 +39045,18 @@ x3dom.registerNodeType(
                             var field = this._cf[ fieldName ];
                             if ( field.rmLink( node ) || force )
                             {
-                                for ( var i = node._parentNodes.length - 1; i >= 0; i-- )
+                                var i = node._parentNodes.indexOf( this );
+                                if ( i >= 0 )
                                 {
-                                    if ( node._parentNodes[ i ] === this )
-                                    {
-                                        node._parentNodes.splice( i, 1 );
-                                        node.parentRemoved( this );
-                                    }
+                                    node._parentNodes.splice( i, 1 );
+                                    node.parentRemoved( this );
                                 }
-                                for ( var j = this._childNodes.length - 1; j >= 0; j-- )
+                                var j = this._childNodes.indexOf( node );
+                                if ( j >= 0 )
                                 {
-                                    if ( this._childNodes[ j ] === node )
-                                    {
-                                        node.onRemove();
-                                        this._childNodes.splice( j, 1 );
-                                        return true;
-                                    }
+                                    node.onRemove();
+                                    this._childNodes.splice( j, 1 );
+                                    return true;
                                 }
                             }
                         }
@@ -38937,7 +39080,7 @@ x3dom.registerNodeType(
                 // attention: overwritten by concrete classes
                 if ( this._parentNodes.length === 0 )
                 {
-                    x3dom.debug.logInfo( this.typeName() + ": " + this._DEF + " is no longer used." );
+                    //x3dom.debug.logInfo( this.typeName() + ": " + this._DEF + " is no longer used." );
                     for ( var i = this._childNodes.length - 1;i >= 0;--i )
                     {
                         this.removeChild( this._childNodes[ i ] ); //remove this node from child's _parentNodes then trigger child.parentRemoved()
@@ -38970,6 +39113,7 @@ x3dom.registerNodeType(
                                 } );
                             }
                         }
+                        nameSpace = null;
                     }
                     if ( this._xmlNode )
                     {
@@ -39747,6 +39891,15 @@ x3dom.registerNodeType(
             {
                 this._cf[ name ] = new x3dom.fields.MFNode( type );
                 this._cfFieldTypes[ name ] = "MFNode";
+            },
+
+            cleanNodeBag : function ( bag )
+            {
+                var i = bag.indexOf( this );
+                if ( i >= 0 )
+                {
+                    bag.splice( i, 1 );
+                }
             }
         }
     )
@@ -40272,6 +40425,25 @@ x3dom.registerNodeType(
             nodeChanged : function ()
             {
                 this._stack = this._nameSpace.doc._bindableBag.addBindable( this );
+            },
+
+            parentRemoved : function ( parent )
+            {
+                x3dom.nodeTypes.X3DChildNode.prototype.parentRemoved.call( this, parent );
+                if ( this._parentNodes.length === 0 )
+                {
+                    var stack = this._stack;
+                    if ( stack )
+                    {
+                        this.bind( false );
+                        this.cleanNodeBag( stack._bindBag );  //X3DNode.cleanNodeBag()
+                    }
+                    // Background may have geometry
+                    if ( this._cleanupGLObjects )
+                    {
+                        this._cleanupGLObjects();
+                    }
+                }
             }
         }
     )
@@ -41069,28 +41241,21 @@ x3dom.registerNodeType(
 
             parentRemoved : function ( parent )
             {
-                var i,
-                    n;
-
                 //This check prevented removal of Transform nodes in removed Inlines.
                 //Should not be necessary and may have been an attempt to speed up removal.
                 //Make permanent if no issues.
 
-                //if (this._parentNodes.length == 0) {
-                var doc = this.findX3DDoc();
-
-                if ( doc )
+                //I re-enabled this check because an x3domNode can be referenced by multiple USE elements,
+                //and it shouldn't be cleaned up until this x3domNode is no longer referenced(this._parentNodes.length === 0).
+                //    ———— microaaron(https://github.com/microaaron), Aug.2022
+                if ( this._parentNodes.length === 0 )
                 {
-                    for ( i = 0, n = doc._nodeBag.trans.length; i < n; i++ )
+                    var doc = this.findX3DDoc();
+                    if ( doc )
                     {
-                        if ( doc._nodeBag.trans[ i ] === this )
-                        {
-                            doc._nodeBag.trans.splice( i, 1 );
-                        }
+                        this.cleanNodeBag( doc._nodeBag.trans );  //X3DNode.cleanNodeBag()
                     }
                 }
-                //}
-
                 x3dom.nodeTypes.X3DGroupingNode.prototype.parentRemoved.call( this, parent );
             }
         }
@@ -42119,6 +42284,25 @@ x3dom.registerNodeType(
                                 " instead of " + that._shadowIdMap.ids.length + "!" );
                     }
                 };
+            },
+
+            //Root scene may have no parent, call parentRemoved() directly to clean up.
+            parentRemoved : function ( parent )
+            {
+                var doc = this.findX3DDoc();
+                x3dom.nodeTypes.X3DGroupingNode.prototype.parentRemoved.call( this, parent );
+                if ( this._parentNodes.length == 0 )
+                {
+                    if ( this._webgl )
+                    {
+                        this._webgl = null;
+                        // TODO; explicitly delete all gl objects
+                    }
+                    if ( doc && doc._scene === this )
+                    {
+                        doc.onSceneRemoved();
+                    }
+                }
             }
         }
     )
@@ -45698,18 +45882,21 @@ x3dom.registerNodeType(
 
             onRemove : function ()
             {
-                x3dom.nodeTypes.ClipPlane.count--;
+                if ( this._parentNodes.length === 0 )
+                {
+                    x3dom.nodeTypes.ClipPlane.count--;
+                }
             },
 
             parentAdded : function ( parent )
             {
-            },
+            }
 
-            parentRemoved : function ( parent )
+            /*parentRemoved : function ( parent )
             {
                 //TODO
                 x3dom.nodeTypes.X3DChildNode.prototype.parentRemoved.call( this, parent );
-            }
+            }*/
         }
     )
 );
@@ -47357,10 +47544,17 @@ x3dom.registerNodeType(
                 if ( this._parentNodes.length > 0 )
                 {this.invalidateVolume();}
 
-                // Cleans all GL objects for WebGL-based renderer
-                if ( this._cleanupGLObjects )
+                if ( this._parentNodes.length === 0 )
                 {
-                    this._cleanupGLObjects();
+                    // Cleans all GL objects for WebGL-based renderer
+                    if ( this._cleanupGLObjects )
+                    {
+                        this._cleanupGLObjects();
+                    }
+                    if ( x3dom.nodeTypes.Shape.idMap.nodeID[ this._objectID ] )
+                    {
+                        delete x3dom.nodeTypes.Shape.idMap.nodeID[ this._objectID ];
+                    }
                 }
             },
 
@@ -47780,29 +47974,23 @@ x3dom.registerNodeType(
                 }
             },
 
-            /*parentRemoved : function ( parent )
+            parentRemoved : function ( parent )
             {
-                if ( this._parentNodes.length === 1 && this._parentNodes[ 0 ] == parent )
+                if ( this._parentNodes.length === 0 )
                 {
                     var doc = this.findX3DDoc();
 
                     if ( doc )
                     {
-                        for ( var i = 0, n = doc._nodeBag.lights.length; i < n; i++ )
-                        {
-                            if ( doc._nodeBag.lights[ i ] === this )
-                            {
-                                doc._nodeBag.lights.splice( i, 1 );
-                            }
-                        }
+                        this.cleanNodeBag( doc._nodeBag.lights );  //X3DNode.cleanNodeBag()
                     }
                 }
                 x3dom.nodeTypes.X3DChildNode.prototype.parentRemoved.call( this, parent );
-            },*/
-            onRemove : function ()
+            }
+            /*onRemove : function ()
             {
                 //console.log("remove");
-            }
+            }*/
         }
     )
 );
@@ -48312,13 +48500,7 @@ x3dom.registerNodeType(
 
                     if ( doc )
                     {
-                        for ( var i = 0, n = doc._nodeBag.followers.length; i < n; i++ )
-                        {
-                            if ( doc._nodeBag.followers[ i ] === this )
-                            {
-                                doc._nodeBag.followers.splice( i, 1 );
-                            }
-                        }
+                        this.cleanNodeBag( doc._nodeBag.followers );  //X3DNode.cleanNodeBag()
                     }
                 }
                 x3dom.nodeTypes.X3DChildNode.prototype.parentRemoved.call( this, parent );
@@ -52565,13 +52747,7 @@ x3dom.registerNodeType(
 
                     if ( doc )
                     {
-                        for ( var i = 0, n = doc._nodeBag.timer.length; i < n; i++ )
-                        {
-                            if ( doc._nodeBag.timer[ i ] === this )
-                            {
-                                doc._nodeBag.timer.splice( i, 1 );
-                            }
-                        }
+                        this.cleanNodeBag( doc._nodeBag.timer );  //X3DNode.cleanNodeBag()
                     }
                 }
                 x3dom.nodeTypes.X3DSensorNode.prototype.parentRemoved.call( this, parent );
@@ -52960,7 +53136,7 @@ x3dom.registerNodeType(
             {
                 if ( fieldName == "url" || fieldName == "load" )
                 {
-                    //Remove the childs of the x3domNode
+                    //Remove the children of the x3domNode
                     for ( var i = this._childNodes.length - 1;i >= 0;--i )
                     {
                         this.removeChild( this._childNodes[ i ] );
@@ -53000,26 +53176,15 @@ x3dom.registerNodeType(
 
             parentRemoved : function ( parent )
             {
-                //var global = x3dom.getGlobal();
-
-                /*if ( this._childNodes.length > 0 && this._childNodes[ 0 ] && this._childNodes[ 0 ]._nameSpace )
-                {this._nameSpace.removeSpace( this._childNodes[ 0 ]._nameSpace );}*/
-                for ( var child of this._childNodes )
+                if ( this._parentNodes.length === 0 )
                 {
-                    this._nameSpace.removeSpace( child._nameSpace );
-                }
-
-                x3dom.nodeTypes.X3DGroupingNode.prototype.parentRemoved.call( this, parent );
-                /*for ( var i = 0, n = this._childNodes.length; i < n; i++ )
-                {
-                    if ( this._childNodes[ i ] )
+                    //Inline only has one child at most.
+                    for ( var child of this._childNodes )
                     {
-                        this._childNodes[ i ].parentRemoved( this );
-                        global[ "_remover" ] = this.removeChild( this._childNodes[ i ] );
+                        this._nameSpace.removeSpace( child._nameSpace );
                     }
-                }*/
-
-                //delete global[ "_remover" ];
+                }
+                x3dom.nodeTypes.X3DGroupingNode.prototype.parentRemoved.call( this, parent );
             },
 
             fireEvents : function ( eventType )
@@ -58205,6 +58370,11 @@ x3dom.registerNodeType(
             this.addField_SFBool( ctx, "loop", false );
 
             this._audio = document.createElement( "audio" );
+            this._audio.setAttribute( "preload", "auto" );
+            //this._audio.setAttribute( "muted", "muted" );
+            this._audio.setAttribute( "autoplay", "" );
+            this._audio.setAttribute( "playsinline", "" );
+            this._audio.crossOrigin = "anonymous";
             //this._audio.setAttribute('preload', 'none');
             //this._audio.setAttribute('autoplay', 'true');
             if ( navigator.appName != "Microsoft Internet Explorer" )
@@ -58233,27 +58403,35 @@ x3dom.registerNodeType(
 
                 var that = this;
 
-                var audioID = 0;
-
                 this._startAudio = function ()
                 {
+                    //x3dom.debug.logInfo( "startAudio" );
+                    window.removeEventListener( "mousedown", that._startAudio );
+                    window.removeEventListener( "keydown", that._startAudio );
+                    if ( !( that._audio instanceof HTMLMediaElement ) )
+                    {
+                        x3dom.debug.logInfo( "No audio exists." );
+                        return;
+                    }
                     if ( that._vf.enabled === true )
                     {
                         that._audio.play()
                             .then( function ( success )
                             {
-                                clearTimeout( audioID );
                             } )
                             .catch( function ( error )
                             {
-                                x3dom.debug.logError( error );
-                                audioID = setTimeout( that._startAudio, 100 );
+                                x3dom.debug.logInfo( "Waiting for interaction: " + error );  //x3dom.debug.logError( error );
+                                window.addEventListener( "mousedown", that._startAudio );
+                                window.addEventListener( "keydown", that._startAudio );
                             } );
                     }
                 };
 
                 this._stopAudio = function ()
                 {
+                    window.removeEventListener( "mousedown", that._startAudio );
+                    window.removeEventListener( "keydown", that._startAudio );
                     that._audio.pause();
                 };
 
@@ -58265,15 +58443,10 @@ x3dom.registerNodeType(
                     }
                 };
 
-                var log = function ( e )
-                {
-                    x3dom.debug.logWarning( "MediaEvent error:" + e );
-                };
-
                 this._audio.addEventListener( "canplaythrough", this._startAudio, true );
                 this._audio.addEventListener( "ended", this._audioEnded, true );
-                this._audio.addEventListener( "error", log, true );
-                this._audio.addEventListener( "pause", this._audioEnded, true );
+                this._audio.addEventListener( "error", ( e )=>{x3dom.debug.logWarning( "MediaEvent error:" + e );}, true );
+                //this._audio.addEventListener( "pause", this._stopAudio, true );
 
                 this._createSources();
             },
@@ -58315,11 +58488,12 @@ x3dom.registerNodeType(
                 }
             },
 
-            shutdown : function ()
+            parentRemoved : function ( parent )
             {
-                if ( this._audio )
+                x3dom.nodeTypes.X3DSoundSourceNode.prototype.parentRemoved.call( this, parent );
+                if ( this._parentNodes.length === 0 && this._audio )
                 {
-                    this._audio.pause();
+                    this._stopAudio();
                     while ( this._audio.hasChildNodes() )
                     {
                         this._audio.removeChild( this._audio.firstChild );
@@ -59134,7 +59308,7 @@ x3dom.registerNodeType(
             this.addField_SFBool( ctx, "hideChildren", true );
 
             this._video = null;
-            this._intervalID = 0;
+            this._intervalID = null;
             this._canvas = null;
         },
         {
@@ -59195,19 +59369,27 @@ x3dom.registerNodeType(
                 }
             },
 
-            shutdown : function ()
+            parentRemoved : function ( parent )
             {
-                if ( this._video )
+                if ( this._parentNodes.length === 0 && this._video )
                 {
-                    this._video.pause();
+                    this._video.pauseVideo();
                     while ( this._video.hasChildNodes() )
                     {
                         this._video.removeChild( this._video.firstChild );
                     }
                     //document.body.removeChild( this._video );
+                    if ( this._video.startVideo )
+                    {
+                        this._video.startVideo = null;
+                    }
+                    if ( this._video.pauseVideo )
+                    {
+                        this._video.pauseVideo = null;
+                    }
                     this._video = null;
-                    clearInterval( this._intervalID );
                 }
+                x3dom.nodeTypes.X3DTextureNode.prototype.parentRemoved.call( this, parent );
             }
         }
     )
@@ -59581,19 +59763,13 @@ x3dom.registerNodeType(
 
                     if ( doc )
                     {
-                        for ( var i = 0, n = doc._nodeBag.renderTextures.length; i < n; i++ )
-                        {
-                            if ( doc._nodeBag.renderTextures[ i ] === this )
-                            {
-                                doc._nodeBag.renderTextures.splice( i, 1 );
-                            }
-                        }
+                        this.cleanNodeBag( doc._nodeBag.renderTextures );  //X3DNode.cleanNodeBag()
                     }
-                }
-
-                if ( this._cf.scene.node )
-                {
-                    this._cf.scene.node.parentRemoved( this );
+                    if ( this._cleanupGLObjects )
+                    {
+                        this._cleanupGLObjects();
+                    }
+                    this._cf.scene.node = null;
                 }
                 x3dom.nodeTypes.X3DTextureNode.prototype.parentRemoved.call( this, parent );
             },
@@ -67166,8 +67342,20 @@ x3dom.registerNodeType(
                     if ( this._isOver ) // button released and still over
                     {this.postMessage( "touchTime", Date.now() / 1000 );}
                 }
-            }
+            },
 
+            parentRemoved : function ( parent )
+            {
+                if ( this._parentNodes.length === 0 )
+                {
+                    var doc = this.findX3DDoc();
+                    if ( doc )
+                    {
+                        this.cleanNodeBag( doc._nodeBag.affectedPointingSensors );  //X3DNode.cleanNodeBag()
+                    }
+                }
+                x3dom.nodeTypes.X3DSensorNode.prototype.parentRemoved.call( this, parent );
+            }
             //----------------------------------------------------------------------------------------------------------------------
         }
     )
